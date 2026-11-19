@@ -1,0 +1,20 @@
+<section id="view-evidence" hidden>
+        <style>#ev-stress td:first-child{white-space:normal;min-width:190px}#ev-stress td.reason{min-width:260px;max-width:none}#ev-stress{min-width:860px}</style>
+        <div id="ev-head">
+          <p class="lead">Does it actually work? The evidence behind the dashboard, including where it fails.</p>
+          <p class="sub">Every number here comes from <code>python -m offerguard.pipeline</code>. Because shoppers are simulated, each strategy can be replayed on the same carts. These results use <em>expected</em> margins, with luck averaged out; the Overview shows <em>realised</em> results, which include luck.</p>
+          <div class="grid kpis" id="ev-kpis"></div>
+        </div>
+        <div class="card" style="margin-top:16px"><h2>Strategy ladder, with the ceiling</h2><p class="hint">Extra margin over 8 weeks compared with sending reminders only. Perfect foresight is what a model that knew every shopper's true response would earn: the ceiling, not a target.</p><div class="strat-chart" id="ev-ladder"></div></div>
+        <div class="grid two" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+          <div class="card"><h2>How much evidence it needs</h2><p class="hint">Margin vs discounting everyone (holdout included), by how many comparable brands' randomised carts the model is trained on.</p><div id="ev-curve"></div><div class="takeaway" id="ev-curve-take"></div></div>
+          <div class="card"><h2>What each signal is worth</h2><p class="hint">Margin lost over 8 weeks when the model is retrained without that signal.</p><div class="bars" id="ev-signals"></div><div class="takeaway" id="ev-signals-take"></div></div>
+        </div>
+        <div class="card" style="margin-top:16px"><h2>Stress tests: where Offer Guard stops helping</h2><p class="hint">The whole pipeline re-run in worlds that break one assumption at a time.</p><div class="table-wrap"><table id="ev-stress"></table></div></div>
+        <div class="grid two" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+          <div class="card"><h2>Is the result luck?</h2><p class="hint">The same pipeline in freshly simulated brands: new shoppers, new pooled training data, new outcomes.</p><div id="ev-robust"></div></div>
+          <div class="card"><h2>Can the pilot see it?</h2><p class="hint">Carts needed per arm for an 80%-power test, with carts split at random between today's flow and Offer Guard.</p><div id="ev-pilot"></div></div>
+        </div>
+        <div class="card" style="margin-top:16px"><h2>Choosing the model</h2><p class="hint">Scored on held-out randomised carts. Only the last column needs the simulation's hidden truth; a real team would see the other four.</p><div class="table-wrap"><table id="ev-bakeoff"></table></div><div class="takeaway" id="ev-bakeoff-take"></div></div>
+        <div class="next"><button class="btn" type="button" data-go="overview">Back to Overview</button></div>
+      </section>
