@@ -1,167 +1,295 @@
+<div align="center">
+
 # Offer Guard
 
 **Discounts for the shoppers who need one. Reminders for everyone else.**
 
-An AI decision layer for a cart-recovery agent. For every shopper who abandons a cart, it predicts whether a discount will actually change their mind, and tells the agent to offer 10%, offer 5%, or send a plain reminder.
+An AI decision layer for cart-recovery agents. It predicts, for each abandoned cart, whether a discount will change the shopper's decision, and spends discounts only where they create a sale.
 
-Built for the **Razorpay AI PM Build Challenge** (semi-finalist), then rebuilt end to end with a trained uplift model, a simulator, stress tests and a revised pilot plan.
+[![CI](https://github.com/rithi-shetty/offer-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/rithi-shetty/offer-guard/actions/workflows/ci.yml) [![Live demo](https://img.shields.io/badge/demo-live-2F7BF5)](https://offer-guard-six.vercel.app/) [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB)](pyproject.toml) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**[Live dashboard](https://offer-guard-six.vercel.app/)** ([mirror](https://rithi-shetty.github.io/offer-guard/)) · [90-second demo](challenge-submission/Demo_Video.mp4) · [Product note](challenge-submission/Product_Note.pdf) · [Pitch deck](challenge-submission/Pitch_Deck.pptx) · [Decision log](docs/decisions.md)
+[**Live demo**](https://offer-guard-six.vercel.app/) ([mirror](https://rithi-shetty.github.io/offer-guard/)) · [Demo video](challenge-submission/Demo_Video.mp4) · [Product note](challenge-submission/Product_Note.pdf) · [Pitch deck](challenge-submission/Pitch_Deck.pptx) · [Decision log](docs/decisions.md)
 
-![Offer Guard dashboard](docs/img/overview.png)
+<img src="docs/img/overview.png" alt="Offer Guard dashboard: margin recovered, discount spend and orders compared with discounting every cart" width="880">
 
----
+</div>
+
+## Overview
+
+Cart-recovery tools report **recovery rate**, a metric that rises with every discount, including the ones given to shoppers who would have bought anyway. Offer Guard changes the question from *"will this shopper buy?"* to *"will a discount change whether they buy?"*, and makes the answer measurable.
+
+Semi-finalist project from the **Razorpay AI PM Build Challenge**, rebuilt end to end as a working system: simulator, trained uplift model, decision engine, merchant dashboard, experiments and tests.
+
+**Key results** (8 weeks, simulated D2C brand, 3,394 contacted carts):
+
+| Metric | Result |
+|---|---|
+| Margin vs discounting every cart | **+₹9,962** |
+| Discount spend | **−40%** |
+| Robustness | Ahead in **20 of 20** freshly simulated brands (median +₹11,234) |
+| Measured lift from offers | **12.0 points** (95% CI 7.4–16.6), via a random holdout |
+| Trade-off | **1.7 points** lower recovery rate, shown openly in the dashboard |
+
+> [!NOTE]
+> All shoppers and outcomes are **simulated**. The model, decision rule, checks and dashboard would run unchanged on real logs; the numbers would not carry over. See [Limitations](#limitations).
+
+## Table of contents
+
+- [The problem](#the-problem)
+- [The solution](#the-solution)
+- [Results](#results)
+- [Product insights](#product-insights)
+- [Where it does not work](#where-it-does-not-work)
+- [How it works](#how-it-works)
+- [Getting started](#getting-started)
+- [Project structure](#project-structure)
+- [Documentation](#documentation)
+- [Limitations](#limitations)
+- [Roadmap](#roadmap)
+- [Author](#author)
+- [License](#license)
 
 ## The problem
 
-Priya buys every month and got distracted. Arjun is new and hesitated at the price. Both abandon a ₹2,000 cart, both get 10% off, both buy. The dashboard shows two "recovered" carts.
+Priya buys every month and got distracted. Arjun is new and hesitated at the price. Both abandon a ₹2,000 cart, both receive 10% off, and both buy. The recovery dashboard counts two recovered carts.
 
-Only one was an extra sale. Priya would have come back anyway, so her ₹200 was margin given away. Shoppers who learn that abandoning brings a coupon start waiting for one.
+Only one was an extra sale. Priya would have returned anyway, so her ₹200 discount was margin given away. Shoppers who learn that abandoning a cart brings a coupon start waiting for one.
 
-Recovery tools report **recovery rate**, which goes up with every discount, including the loss-making ones. Nobody reports how many recovered carts would have come back on their own.
+**Who it is for:** growth managers at Indian D2C brands who own cart recovery and the discount budget.
 
-## What I built
+## The solution
 
-| | Challenge version (v1) | Portfolio version (v2, this repo) |
-|---|---|---|
-| Product | Merchant dashboard: decisions with reasons, overrides, suggest-only mode, policy preview, pause switch, holdout | Same, plus an **Evidence** screen |
-| AI estimates | Simulated, written into the data | **Trained uplift model** on randomised carts |
-| Proof | Strategy comparison on one dataset | Learning curve, signal value, 6 stress tests, 20 fresh worlds, pilot power analysis |
-| Engineering | One HTML file | Python package, 21 tests, CI, one-command pipeline, JS/Python parity check |
-
-| Every decision shows its arithmetic | The Evidence screen shows the failures too |
+| Capability | What it does |
 |---|---|
-| ![Decision drawer](docs/img/decision.png) | ![Evidence screen](docs/img/evidence.png) |
+| **Per-shopper decision** | Recommends a 10% offer, a 5% offer or a plain reminder for every abandoned cart |
+| **Visible rule** | The AI only estimates probabilities; a one-line expected-value rule decides, shown with real numbers on every cart |
+| **Built-in measurement** | A random 10% holdout measures what offers actually add, without trusting the model |
+| **Merchant control** | Suggest-only mode, overrides, minimum-gain and budget settings, policy preview, pause switch, change history |
+| **Safety net** | A drift monitor switches to reminder-first mode when predictions stop matching outcomes |
+| **Shopper fairness** | Reminders never mention discounts; uncertain identity links never reduce an offer |
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/decision.png" alt="Decision drawer showing the model estimate and the calculation behind a 10% offer"></td>
+<td width="50%"><img src="docs/img/evidence.png" alt="Evidence screen comparing strategies against a perfect-foresight ceiling"></td>
+</tr>
+<tr>
+<td align="center"><sub>Every decision shows its arithmetic</sub></td>
+<td align="center"><sub>The Evidence screen reports failures as well as wins</sub></td>
+</tr>
+</table>
+
+### Challenge version vs this repository
+
+| | Challenge prototype (v1) | This repository (v2) |
+|---|---|---|
+| AI estimates | Simulated, written into the data | Trained two-part uplift model on randomised carts |
+| Evidence | One strategy comparison | Learning curve, signal value, 6 stress tests, 20 fresh worlds, pilot power analysis |
+| Engineering | Single HTML file | Python package, 21 tests, CI, one-command pipeline, JS/Python parity check |
 
 ## Results
 
-Over 8 weeks, a simulated skincare brand had 3,394 abandoned carts that the agent contacted. The same carts were replayed under each strategy:
+The same carts, replayed under each strategy. Expected values, with the 10% measurement holdout included.
 
-| | Discount everyone 10% | **Offer Guard** | Perfect foresight (ceiling) |
-|---|---|---|---|
-| Margin vs reminders only | ₹80,262 | **₹90,225** | ₹1,18,212 |
-| Discount spend | ₹1,38,710 | **₹83,304 (−40%)** | ₹68,796 |
-| Orders | 1,059 | **1,001 (−58)** | 1,015 |
+| Strategy | Margin vs reminders only | Discount spend | Orders |
+|---|---:|---:|---:|
+| 10% on first abandonment only | ₹31,810 | ₹36,034 | 878 |
+| 10% on carts ≥ ₹1,000 | ₹68,466 | ₹1,06,446 | 956 |
+| Discount everyone 10% | ₹80,262 | ₹1,38,710 | 1,059 |
+| **Offer Guard** | **₹90,225** | **₹83,304** | **1,001** |
+| Perfect foresight *(ceiling)* | ₹1,18,212 | ₹68,796 | 1,015 |
 
-*Expected values, with the 10% measurement holdout included. Realised outcomes, which include luck, point the same way: +₹9,267 margin against discounting everyone.*
+<img src="reports/figures/strategies.png" alt="Bar chart of extra margin by strategy; Offer Guard is above every fixed rule and below the perfect-foresight ceiling" width="720">
 
-![Strategies](reports/figures/strategies.png)
+- **Realised outcomes agree.** Including luck, Offer Guard earned +₹9,267 more than discounting everyone.
+- **The holdout has a price.** Without it the edge roughly doubles to +₹20,000. The holdout is what makes the effect provable.
+- **The model is checked without trusting it.** It expected a 9.2-point lift; the holdout measured 12.0 (95% CI 7.4–16.6). Of discounted buyers, 57% would have bought anyway.
+- **Smaller than the challenge claim.** The v1 prototype reported +₹17,855 and 54% less spend from simulated estimates. With a trained model the edge is smaller, and this README reports the smaller figure.
 
-- **+₹9,962 margin and 40% less discount spend** than discounting everyone, for 1.7 points lower recovery rate. Without the holdout the edge doubles to about +₹20,000; the holdout is the price of being able to *prove* the effect.
-- **It isn't one lucky run.** In 20 freshly simulated brands, Offer Guard came out ahead in all 20 on expected margin and in 19 on realised margin. The median edge was +₹11,234, and it captured 53% of what perfect foresight would earn.
-- **The holdout checks the model without trusting it.** Among the shoppers Offer Guard chose to discount, offers lifted purchases by 12.0 points (95% range 7.4 to 16.6). The model expected 9.2. Of the discounted buyers, 57% would have bought anyway.
-- **Honest comparison with v1.** The challenge prototype claimed +₹17,855 and 54% less spend. Those came from simulated estimates. With a trained model the edge is smaller, and this README uses the smaller number.
+## Product insights
 
-## What the evidence changed
+Rebuilding the product with a trained model changed several of the original decisions. Full reasoning is in the [decision log](docs/decisions.md).
 
-Rebuilding with a real model overturned some of my own assumptions. These are the parts I'd talk about in an interview; the full reasoning is in the [decision log](docs/decisions.md).
+<details open>
+<summary><b>1. It is a platform feature, not a plugin</b></summary>
 
-1. **It's a platform feature, not a plugin.** Trained only on one brand's own carts, Offer Guard *loses* ₹7,522 against discounting everyone. It needs about 8 brands' worth of randomised evidence before it reliably wins. That's why it belongs inside Razorpay, which sees thousands of merchants, and it's a moat a smaller competitor can't copy. Only cart-level signals are pooled, never shopper identities.
+Trained only on one brand's carts, Offer Guard **loses ₹7,522** against discounting everyone. It needs about 8 brands' worth of randomised evidence before it wins reliably. That places it inside a payments platform that sees thousands of merchants, and makes data scale a moat. Only cart-level signals are pooled, never shopper identities.
 
-   ![Learning curve](reports/figures/learning_curve.png)
+<img src="reports/figures/learning_curve.png" alt="Margin versus number of brands pooled for training; negative at one to four brands, positive from eight" width="680">
+</details>
 
-2. **The pilot I proposed could not have proved the margin gain.** The gain is about ₹3 a cart against ₹377 of cart-to-cart noise, so detecting it needs about 2,59,000 carts per arm. A 5-brand, 8-week pilot produces about 8,500. Discount savings, in contrast, show up in under a week. I [redesigned the pilot](docs/pilot-plan.md) around what it can actually measure.
+<details>
+<summary><b>2. The original pilot could not have proved the margin gain</b></summary>
 
-3. **The agent's question is part of the product.** "Why did you leave?" from the recovery agent's conversation is the most valuable signal, worth ₹6,931 over 8 weeks. When the agent rarely hears it, most of the edge disappears. So the recovery agent's script is in scope, not someone else's problem.
+The gain is about ₹3 per cart against ₹377 of cart-to-cart noise: detecting it needs about 2,59,000 carts per arm, while a 5-brand, 8-week pilot yields about 8,500. Discount savings are detectable in under a week. The [revised pilot plan](docs/pilot-plan.md) is built around what a pilot can measure.
+</details>
 
-   ![Signal value](reports/figures/signal_value.png)
+<details>
+<summary><b>3. The agent's "why did you leave?" question is part of the product</b></summary>
 
-4. **My safety net cried wolf, so I changed its trigger.** The original drift check was too noisy on a two-week window and fired on a healthy model. The new one fires in the week behaviour actually shifts, with 1 false alarm across 20 simulated brands.
+It is the most valuable signal, worth ₹6,931 over 8 weeks. When the agent rarely hears it, most of the edge disappears, so the recovery agent's script is in scope.
 
-5. **The best-scoring model wasn't the most profitable.** On 55,000 held-out carts, the model with the best prediction accuracy made less money than a simpler two-part design. The observable margin estimates overlapped within their error bars, so I chose on reasoning and wrote down that the data couldn't settle it.
+<img src="reports/figures/signal_value.png" alt="Margin lost when each signal is removed; the reason for leaving and order history matter most" width="680">
+</details>
 
-6. **Stricter isn't safer.** Raising the merchant's minimum-gain dial past about ₹25 a cart turns the edge negative. The dashboard's policy preview shows this before anything is applied.
+<details>
+<summary><b>4. The safety net raised false alarms, so its trigger changed</b></summary>
 
-   ![Frontier](reports/figures/frontier.png)
+The original drift check was too noisy on a two-week window and fired on a healthy model. The revised trigger fires in the week behaviour actually shifts, with 1 false alarm across 20 simulated brands.
+</details>
+
+<details>
+<summary><b>5. The most accurate model was not the most profitable</b></summary>
+
+On 55,000 held-out carts, the model with the best prediction accuracy earned less than a simpler two-part design. The observable estimates overlapped within their error bars, so the choice was made on reasoning and recorded as such.
+</details>
+
+<details>
+<summary><b>6. Stricter is not safer</b></summary>
+
+Raising the minimum-gain threshold past about ₹25 per cart turns the edge negative. The dashboard's policy preview shows this before a change is applied.
+
+<img src="reports/figures/frontier.png" alt="Margin and orders versus the minimum-gain threshold" width="680">
+</details>
 
 ## Where it does not work
 
-The whole pipeline, re-run in worlds that each break one assumption:
+The full pipeline, re-run in worlds that each break one assumption:
 
-| World | Offer Guard vs discount everyone | What it means |
-|---|---|---|
+| Scenario | vs discount everyone | Implication |
+|---|---:|---|
+| Thin margins (25–35%) | **+₹43,288** | Blanket discounts are most expensive here; best first customers |
+| Behaviour shifts in week 4 | **+₹15,240** | Safety net trips in week 4 and protects about ₹10,000 |
 | Base case | **+₹9,962** | |
-| Thin margins (25–35%) | **+₹43,288** | A blanket 10% is very expensive here, so targeting pays most. Best first customers |
-| Behaviour shifts in week 4 | **+₹15,240** | The safety net trips in week 4 and falls back to reminder-first, protecting about ₹10,000 |
 | Agent hears the reason on only 30% of carts | +₹5,365 | Most of the edge depends on the conversation signal |
-| Fat margins (70–80%) | **−₹3,533** | Almost every discount pays for itself; blanket 10% is hard to beat |
-| Every shopper responds alike | **−₹11,140** | Nothing to target; the model finds patterns in noise. The holdout and lift-ranking checks are how a team would catch this |
+| Fat margins (70–80%) | **−₹3,533** | Nearly every discount pays for itself; blanket 10% is hard to beat |
+| Every shopper responds alike | **−₹11,140** | Nothing to target; holdout and lift-ranking checks catch this before scaling |
 
-![Stress tests](reports/figures/stress.png)
+These define the go-to-market filter: thin-margin merchants, mixed shopper bases, and a recovery agent that asks why the shopper left.
 
-These are go-to-market filters, not footnotes. The first merchants should have thin margins, mixed shopper bases, and an agent that asks why the shopper left.
+<img src="reports/figures/stress.png" alt="Offer Guard and perfect-foresight margin against discounting everyone, per stress scenario" width="720">
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A[Shopper leaves a cart<br/>Magic Checkout] --> B[Recovery agent asks<br/>why they left]
-    B --> C{Offer Guard}
-    C -->|signals| M[Uplift model:<br/>P buy with reminder, 5%, 10%]
-    M --> R[Visible rule:<br/>offer only if it pays<br/>for itself]
-    R -->|10% · 5% · reminder| D[Agent sends the message]
-    D --> E[Outcome logged]
-    E -->|1 in 10 offers held out| H[Holdout: measures<br/>what offers add]
-    E --> F[Calibration and<br/>drift monitor]
-    F -->|drift over 5 pts| S[Safety net:<br/>reminder-first mode]
-    H --> M
+    A[Shopper abandons a cart] --> B[Recovery agent asks<br/>why they left]
+    B --> C[Uplift model<br/>P buy: reminder, 5%, 10%]
+    C --> D[Decision rule<br/>offer only if it pays]
+    D -->|10% · 5% · reminder| E[Agent sends message]
+    E --> F[Outcome logged]
+    F -->|1 in 10 offers held out| G[Holdout measures<br/>true lift]
+    F --> H[Drift monitor]
+    H -->|gap over 5 pts| I[Reminder-first<br/>fallback]
+    G --> C
 ```
 
-**The rule.** The model only predicts. A one-line rule, shown in the dashboard with the real numbers, decides:
+**Decision rule.** The model predicts; a fixed rule decides:
 
-```
+```text
 value of offer = P(buy | offer) × (margin − discount) − P(buy | reminder) × margin
 ```
 
-The second term charges the offer for every shopper who would have bought anyway. That one term is what makes it different from "will this shopper buy?".
+The second term charges each offer for shoppers who would have bought anyway. An offer is made only if its value clears the merchant's minimum gain.
 
-**The model.** A two-part uplift model: boosted trees for "would they buy after a reminder?" and regularised logistic regression for "how much does an offer add?". It is trained only on carts where the offer was assigned at random. Details, inputs it is never allowed to see, and known failure modes are in the [model card](docs/model-card.md).
+**Model.** A two-part uplift model: gradient-boosted trees estimate the baseline (*would they buy after a reminder?*) and a regularised logistic model estimates the lift (*how much does an offer add?*). It trains only on carts where the offer was assigned at random. Inputs, exclusions and failure modes are documented in the [model card](docs/model-card.md).
 
-| It ranks shoppers by how much an offer moves them | Its estimates match what shoppers do |
+| Ranks shoppers by persuadability | Calibrated against outcomes |
 |---|---|
-| ![Uplift by quintile](reports/figures/uplift_quintiles.png) | ![Calibration](reports/figures/calibration.png) |
-| True lift rises from 2.9 points in the least persuadable fifth to 11.5 in the most | Predictions are on average within 2.5 points of actual purchase rates |
+| <img src="reports/figures/uplift_quintiles.png" alt="Predicted and true lift by quintile, rising from least to most persuadable" width="420"> | <img src="reports/figures/calibration.png" alt="Predicted versus actual purchase rate, close to the diagonal" width="340"> |
+| True lift rises from 2.9 to 11.5 points across quintiles | Mean calibration gap: 2.5 points |
 
-Every decision the dashboard computes in JavaScript is checked on page load against the Python reference engine; all 3,517 carts match.
+**Verification.** On every page load, the dashboard re-computes all 3,517 decisions in JavaScript and checks them against the Python reference engine.
 
-## Try it
+**Tech stack:** Python (NumPy, pandas, scikit-learn, SciPy, Matplotlib), vanilla JavaScript, pytest, GitHub Actions, Vercel.
+
+## Getting started
+
+### Prerequisites
+
+- Python 3.10 or later
+- About 6 minutes for the full pipeline (2 minutes with `--quick`)
+
+### Installation
 
 ```bash
+git clone https://github.com/rithi-shetty/offer-guard.git
+cd offer-guard
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python -m offerguard.pipeline        # simulate, train, run every experiment (~6 min)
-pytest -q                            # 21 tests
-python -m http.server 8000 --directory web   # dashboard at http://localhost:8000
 ```
 
-`python -m offerguard.pipeline --quick` runs a smaller version in about 2 minutes. Every number in this README is read from `reports/results.json`, which the pipeline writes.
+### Usage
 
-## Repository map
+| Task | Command |
+|---|---|
+| Run the full pipeline (simulate, train, evaluate, write reports) | `python -m offerguard.pipeline` |
+| Run a faster, smaller pipeline | `python -m offerguard.pipeline --quick` |
+| Run the tests | `pytest -q` |
+| Open the dashboard locally | `python -m http.server 8000 --directory web`, then visit http://localhost:8000 |
+| Rebuild the dashboard from the v1 prototype | `python tools/build_dashboard.py` |
 
+Every figure in this README is read from `reports/results.json`, which the pipeline regenerates. Runs are seeded and reproducible.
+
+## Project structure
+
+```text
+offer-guard/
+├── offerguard/              # Core package
+│   ├── config.py            # Simulation assumptions, in one place
+│   ├── simulate.py          # Shoppers, carts, learning and live phases, drift monitor
+│   ├── features.py          # Model inputs, and what the model may not see
+│   ├── model.py             # Uplift model candidates
+│   ├── policy.py            # Decision rule, holdout, messages, explanations
+│   ├── evaluate.py          # Strategy scoring, holdout readout, calibration
+│   ├── experiments.py       # Bake-off, learning curve, stress tests, pilot power
+│   ├── figures.py           # README charts
+│   └── pipeline.py          # End-to-end run
+├── web/                     # Static dashboard (deployed to Vercel and GitHub Pages)
+├── tools/                   # Builds web/ from the v1 prototype as a reviewable patch
+├── tests/                   # 21 tests, including JS/Python decision parity
+├── docs/                    # Model card, decision log, pilot plan, screenshots
+├── reports/                 # results.json and figures
+└── challenge-submission/    # Original note, deck, video, build log and prototype
 ```
-offerguard/            the engine
-  config.py            every assumption about the simulated merchant, in one place
-  simulate.py          shoppers, carts, warm-up → randomised learning → live phases, drift monitor
-  features.py          what the model may see (and what it may not)
-  model.py             uplift model candidates
-  policy.py            the decision rule, holdout, messages, explanations
-  evaluate.py          scoring: strategies, holdout readout, calibration
-  experiments.py       bake-off, learning curve, signal value, stress tests, robustness, pilot power
-  pipeline.py          runs everything; writes reports/ and web/data.js
-web/                   the dashboard (static; root index.html forwards here; also deploys to GitHub Pages)
-tools/                 builds web/index.html from the v1 prototype, so every change is reviewable
-tests/                 21 tests, including the JavaScript/Python decision parity
-docs/                  model card, decision log, revised pilot plan
-reports/               results.json and figures
-challenge-submission/  the original note, deck, video, build log and prototype, unchanged
-```
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [Model card](docs/model-card.md) | Training data, inputs and exclusions, checks, known failure modes |
+| [Decision log](docs/decisions.md) | 14 product and AI decisions, with alternatives and evidence |
+| [Pilot plan](docs/pilot-plan.md) | Revised pilot design, success criteria and stop rules |
+| [Challenge submission](challenge-submission/README.md) | The original product note, pitch deck, demo video and prototype |
+| [AI build log](challenge-submission/AI_Build_Log.md) | How AI tools were used, and the outputs that were rejected |
 
 ## Limitations
 
-- **All shoppers are simulated.** The parameters in [`config.py`](offerguard/config.py) are invented and anchored to the challenge prototype's shopper mix. The model, rule, checks and dashboard would run unchanged on real logs; the *numbers* would not carry over.
-- **No coupon-waiting behaviour.** Simulated shoppers don't learn to wait for discounts, so the long-run benefit of discounting less isn't credited to Offer Guard.
-- **Pooling across merchants** is simulated with de-identified cart rows. In production it would use aggregated model parameters.
-- My reading of the DPDP Act is a design interpretation, not legal advice.
+- **Simulated data.** Parameters in [`config.py`](offerguard/config.py) are invented and anchored to the challenge prototype's shopper mix.
+- **No coupon-waiting dynamics.** Simulated shoppers do not learn to wait for discounts, so the long-run benefit of discounting less is not credited.
+- **Pooled training is simplified.** Cross-merchant pooling uses de-identified cart rows; production would use aggregated model parameters.
+- **Legal interpretation.** The DPDP Act reading behind the consent design is a product interpretation, not legal advice.
 
-## About
+## Roadmap
 
-Rithika U Shetty, ISB PGP '27. Product decisions, research and verification are mine. AI tools were used for research, critique and code, and how they were used, including the AI outputs I rejected, is documented in the [AI build log](challenge-submission/AI_Build_Log.md).
+- [x] Trained uplift model, simulator and decision engine
+- [x] Stress tests, robustness runs and pilot power analysis
+- [x] Merchant dashboard with Evidence screen
+- [ ] Validate with Razorpay: how the agent picks offers today, and Thirdwatch score access
+- [ ] Model coupon-waiting behaviour in the simulator
+- [ ] Adapter for real recovery-agent logs
+- [ ] Federated training across merchants using aggregated parameters only
+- [ ] 8-week pilot with 3–5 merchants, per the [pilot plan](docs/pilot-plan.md)
+
+## Author
+
+**Rithika U Shetty**, ISB PGP '27 · [GitHub](https://github.com/rithi-shetty)
+
+Product decisions, research and verification are the author's own. AI tools were used for research, critique and code; how they were used is documented in the [AI build log](challenge-submission/AI_Build_Log.md).
+
+## License
+
+Released under the [MIT License](LICENSE).
+
+<sub>Offer Guard is an independent project created for the Razorpay AI PM Build Challenge. It is not affiliated with, endorsed by or a product of Razorpay. Razorpay, Magic Checkout and Thirdwatch are referenced only to describe the challenge context.</sub>

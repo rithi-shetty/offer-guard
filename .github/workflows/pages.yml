@@ -1,10 +1,11 @@
 name: deploy-dashboard
 
-# Publishes web/ to GitHub Pages. One-time setup in the repository:
-# Settings > Pages > Build and deployment > Source: GitHub Actions.
+# Mirror of the dashboard on GitHub Pages (primary live demo: Vercel).
+# Requires Settings > Pages > Source: GitHub Actions.
 on:
   push:
     branches: [main]
+    paths: ["web/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
