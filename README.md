@@ -6,7 +6,7 @@ An AI decision layer for a cart-recovery agent. For every shopper who abandons a
 
 Built for the **Razorpay AI PM Build Challenge** (semi-finalist), then rebuilt end to end with a trained uplift model, a simulator, stress tests and a revised pilot plan.
 
-**[Live dashboard](https://rithi-shetty.github.io/offer-guard/)** · [90-second demo](challenge-submission/Demo_Video.mp4) · [Product note](challenge-submission/Product_Note.pdf) · [Pitch deck](challenge-submission/Pitch_Deck.pptx) · [Decision log](docs/decisions.md)
+**[Live dashboard](https://offer-guard-six.vercel.app/)** ([mirror](https://rithi-shetty.github.io/offer-guard/)) · [90-second demo](challenge-submission/Demo_Video.mp4) · [Product note](challenge-submission/Product_Note.pdf) · [Pitch deck](challenge-submission/Pitch_Deck.pptx) · [Decision log](docs/decisions.md)
 
 ![Offer Guard dashboard](docs/img/overview.png)
 
@@ -147,7 +147,7 @@ offerguard/            the engine
   evaluate.py          scoring: strategies, holdout readout, calibration
   experiments.py       bake-off, learning curve, signal value, stress tests, robustness, pilot power
   pipeline.py          runs everything; writes reports/ and web/data.js
-web/                   the dashboard (static; deploys to GitHub Pages)
+web/                   the dashboard (static; root index.html forwards here; also deploys to GitHub Pages)
 tools/                 builds web/index.html from the v1 prototype, so every change is reviewable
 tests/                 21 tests, including the JavaScript/Python decision parity
 docs/                  model card, decision log, revised pilot plan
